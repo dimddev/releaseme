@@ -1,0 +1,65 @@
+#!/bin/bash
+
+VERSION=$1
+
+run_tests() {
+    step=$1
+    if [[ -e "setup.py" ]]; then
+        echo "Tests run successful - $step ..."
+        python setup.py test
+        if [[ "$?" -ne "0" ]]; then
+            echo "Tests run with errors - $step"
+            exit 1
+        fi
+    fi
+}
+
+if [[ -z $VERSION ]]; then
+    echo "A version argument is mandatory ..."
+    echo "Usage:"
+    echo "$ releaseme 0.1.0"
+    exit 1
+fi
+
+if [[ ! -z $(git tag | grep $VERSION) ]]; then
+    echo "Tag $VERSION exist, choose another ..."
+    exit 1
+fi
+
+if [[ -z $(git branch -a | grep "release/$VERSION") ]]; then
+    echo "The release branch release/$VERSION doesn't exist ..."
+    exit 1
+fi
+
+
+git fetch -q origin master
+git fetch -q origin develop
+git checkout master
+run_tests "after checkout master no merge"
+git merge --no-ff release/$VERSION
+run_tests "after merge release/$VERSION into master"
+
+git tag -a -m "hook: create version $VERSION" -s -u $(git config --get user.email) $VERSION
+gitchangelog > CHANGELOG.md
+git tag -d $VERSION
+git add CHANGELOG.md
+git commit -m "hook: update chnagelog"
+git tag -a -m "hook: create version $VERSION" -s -u $(git config --get user.email) $VERSION
+
+git checkout develop
+git merge --no-ff master
+run_tests "after merge master into develop"
+
+git push --set-upstream origin develop
+# git push -u origin master
+git push --tags
+
+git branch -d release/$VERSION
+
+echo "Next steps:"
+echo " - Merge origin/develop into origin/master"
+echo " - git checkout master"
+echo " - git pull"
+echo " - git checkout develop"
+echo " - git merge --no-ff master"
+exit 0
